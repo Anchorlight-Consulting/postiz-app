@@ -264,16 +264,8 @@ export class AutopostService {
   async useRssImage(state: WorkflowChannelsState) {
     const imageUrl = state.load.imageUrl;
     if (!imageUrl) return state;
-    try {
-      const res = await fetch(imageUrl);
-      if (!res.ok) return state;
-      const buffer = await res.arrayBuffer();
-      const contentType = res.headers.get('content-type') || 'image/jpeg';
-      const base64 = Buffer.from(buffer).toString('base64');
-      return { ...state, image: `data:${contentType};base64,${base64}` };
-    } catch {
-      return state;
-    }
+    // Store the URL directly — no downloading, no base64, no disk usage
+    return { ...state, image: imageUrl };
   }
 
   async generatePicture(state: WorkflowChannelsState) {
@@ -306,7 +298,7 @@ export class AutopostService {
       date: nextTime + 'Z',
       order: makeId(10),
       shortLink: false,
-      type: 'draft',
+      type: 'schedule',
       tags: [],
       posts: state.integrations.map((i) => ({
         settings: {
