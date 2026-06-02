@@ -25,4 +25,5 @@ COPY var/docker/nginx.conf /etc/nginx/nginx.conf
 RUN pnpm install
 RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build
 
-CMD ["sh", "-c", "nginx && pnpm run pm2"]
+# Write container env vars to /app/.env so PM2 dotenv scripts can load them
+CMD ["sh", "-c", "printenv > /app/.env && nginx && pnpm run pm2"]
