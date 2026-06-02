@@ -19,11 +19,7 @@ import { TypedSearchAttributes } from '@temporalio/common';
 import {
   organizationId,
 } from '@gitroom/nestjs-libraries/temporal/temporal.search.attribute';
-const parser = new Parser({
-  customFields: {
-    item: [['media:content', 'media:content', { keepArray: false }]],
-  },
-});
+const parser = new Parser();
 
 interface WorkflowChannelsState {
   messages: BaseMessage[];
@@ -36,7 +32,6 @@ interface WorkflowChannelsState {
     date: string;
     url: string;
     description: string;
-    imageUrl?: string;
   };
 }
 
@@ -150,25 +145,10 @@ export class AutopostService {
         { pubDate: dayjs().subtract(100, 'years') }
       );
 
-      // Extract image URL from enclosure, media:content, or content:encoded img tag
-      const enclosureUrl =
-        findLast?.enclosure?.type?.startsWith('image')
-          ? findLast.enclosure.url
-          : undefined;
-      const mediaUrl =
-        findLast?.['media:content']?.['$']?.url ||
-        findLast?.['media:content']?.url;
-      const contentImgMatch = (
-        findLast?.['content:encoded'] || ''
-      ).match(/<img[^>]+src=["']([^"']+)["']/i);
-      const contentImgUrl = contentImgMatch?.[1];
-      const imageUrl = enclosureUrl || mediaUrl || contentImgUrl;
-
       return {
         success: true,
         date: findLast.pubDate,
         url: findLast.link,
-        imageUrl,
         description: striptags(
           findLast?.['content:encoded'] ||
             findLast?.content ||
@@ -261,13 +241,6 @@ export class AutopostService {
     };
   }
 
-  async useRssImage(state: WorkflowChannelsState) {
-    const imageUrl = state.load.imageUrl;
-    if (!imageUrl) return state;
-    // Store the URL directly — no downloading, no base64, no disk usage
-    return { ...state, image: imageUrl };
-  }
-
   async generatePicture(state: WorkflowChannelsState) {
     const structuredOutput = model.withStructuredOutput(dallePrompt);
     const { generatedTextToBeSentToDallE } =
@@ -298,7 +271,7 @@ export class AutopostService {
       date: nextTime + 'Z',
       order: makeId(10),
       shortLink: false,
-      type: 'schedule',
+      type: 'draft',
       tags: [],
       posts: state.integrations.map((i) => ({
         settings: {
@@ -366,7 +339,6 @@ export class AutopostService {
     const state = AutopostService.state();
     const workflow = state
       .addNode('generate-description', this.generateDescription.bind(this))
-      .addNode('use-rss-image', this.useRssImage.bind(this))
       .addNode('generate-picture', this.generatePicture.bind(this))
       .addNode('schedule-post', this.schedulePost.bind(this))
       .addNode('update-url', this.updateUrl.bind(this))
@@ -377,16 +349,12 @@ export class AutopostService {
           if (!state.description) {
             return 'schedule-post';
           }
-          if (state.load.imageUrl) {
-            return 'use-rss-image';
-          }
           if (state.body.addPicture) {
             return 'generate-picture';
           }
           return 'schedule-post';
         }
       )
-      .addEdge('use-rss-image', 'schedule-post')
       .addEdge('generate-picture', 'schedule-post')
       .addEdge('schedule-post', 'update-url')
       .addEdge('update-url', END);
